@@ -1,0 +1,16 @@
+{
+  "version": "0.0.0",
+  "name": "root",
+  "private": false,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "bootstrap": "npx lerna bootstrap --hoist"
+  },
+  "devDependencies": {
+    "@lerna/link": "^6.1.0",
+    "@lerna/publish": "^6.1.0",
+    "lerna": "^6.1.0"
+  }
+}
