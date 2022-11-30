@@ -1,1 +1,0 @@
-add this library as we find more shared code between app and cli

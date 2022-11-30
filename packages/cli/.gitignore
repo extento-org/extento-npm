@@ -1,0 +1,6 @@
+.DS_Store
+pids
+logs
+tmp
+temp
+node_modules

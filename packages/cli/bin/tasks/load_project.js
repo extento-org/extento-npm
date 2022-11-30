@@ -1,0 +1,93 @@
+#!/usr/bin/env node
+
+const path = require('path');
+const fs = require('fs');
+const fs_extra = require('fs-extra');
+const _ = require('lodash');
+const uuid = require('uuid');
+const superagent = require('superagent');
+const adm_zip = require('adm-zip');
+
+const constants = require('../../config/constants');
+const release = require('../../config/release.json');
+const logger =  require('../utils/logger');
+
+const REPO_HASH = release.REPO_HASH;
+const REPO_URL = release.REPO_URL;
+
+const TMP_PATH = path.resolve(constants.TMP_DIR, uuid.v4());
+
+const log = logger(`${__filename.replace(path.resolve(__dirname, '..'), '')}`);
+
+const clean_half_baked_project = (project_path) => {
+    log.info(`cleaning unfinished project dir`);
+    fs.rmSync(project_path, { recursive: true, force: true });
+};
+
+const clean_tmp = async () => {
+    log.info(`cleaning temp dir`);
+    fs.rmSync(constants.TMP_DIR, { recursive: true, force: true });
+};
+
+const download_repo_to_zip = (repo_url, commit_hash) => {
+    return new Promise((resolve, reject) => {
+        if (!fs.existsSync(constants.TMP_DIR)) {
+            fs.mkdirSync(constants.TMP_DIR);
+        }
+        fs.mkdirSync(TMP_PATH);
+        const zip_file = `${commit_hash}.zip`;
+        const href = `${repo_url}/archive`;
+        const source = `${href}/${zip_file}`;
+        const output_file = path.resolve(TMP_PATH, zip_file);
+        log.info(`downloading repo`);
+        superagent
+            .get(source)
+            .on('error', error => {
+                reject(error);
+            })
+            .pipe(fs.createWriteStream(output_file))
+            .on('finish', () => {
+                log.info(`saved zip to temp path`);
+                resolve(output_file);
+            });
+    });
+};
+
+const extract_project = async (project_path, name, zip_path) => {
+    fs_extra.mkdirSync(project_path);
+    const path_to_expanded_zip = path.resolve(project_path, constants.REPO_ZIP_EXPANDED_NAME);
+    const zip = new adm_zip(zip_path);
+    log.info(`extracting zip`)
+    zip.extractAllTo(name, 'true');
+
+    if (!fs.existsSync(path_to_expanded_zip)) {
+        throw new Error(`${path_to_expanded_zip} does not exist`)
+    }
+
+    log.info(`copying template`)
+    fs_extra.copySync(
+        path_to_expanded_zip,
+        project_path, 
+        { overwrite: false },
+    );
+    
+    log.info(`cleaning`);
+    fs.rmSync(path_to_expanded_zip, { recursive: true, force: true });
+};
+
+module.exports = async (name, project_path) => {
+    let err;
+    try {
+        const output_file = await download_repo_to_zip(REPO_URL, REPO_HASH);
+        await extract_project(project_path, name, output_file);
+    } catch(_err) {
+        await clean_half_baked_project(project_path);
+        err = _err;
+    }
+    finally {
+        await clean_tmp();
+        if (err) {
+            throw new Error(err);
+        }
+    }
+};
